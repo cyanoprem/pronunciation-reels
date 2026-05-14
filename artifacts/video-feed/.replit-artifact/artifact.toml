@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/video-feed/"
+title = "Video Feed Prototype"
+version = "1.0.0"
+id = "artifacts/video-feed"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/video-feed/" ]
+localPort = 18977
+
+[services.development]
+run = "pnpm --filter @workspace/video-feed run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/video-feed", "run", "build" ]
+publicDir = "artifacts/video-feed/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18977"
+BASE_PATH = "/video-feed/"

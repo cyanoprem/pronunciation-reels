@@ -822,8 +822,8 @@ function PracticeFlow() {
   const handleClose = useCallback(() => {
     cleanupRecorder();
     void stopSpeaking();
-    router.push("/");
-  }, [router, cleanupRecorder]);
+    router.push(`/?next=${videoId}`);
+  }, [router, cleanupRecorder, videoId]);
 
   const handleMicPress = useCallback(async (forSentence = false) => {
     console.log("[practice] mic pressed, stage:", state.stage);

@@ -971,20 +971,9 @@ function PracticeFlow() {
         );
       }
 
-      case "pass-word":
-        if (wordScores.length >= 2) {
-          return (
-            <PassWordView
-              word={word}
-              phonetic={phonetic}
-              nextLabel="Next"
-              onNext={() => {
-                cleanupRecorder();
-                dispatch({ type: "NEXT_STAGE", stage: "sentence" });
-              }}
-            />
-          );
-        }
+      case "pass-word": {
+        // Count only passing scores — failures also push to wordScores so .length is unreliable
+        const passingCount = wordScores.filter(s => s >= PASS).length;
         return (
           <PassWordView
             word={word}
@@ -992,10 +981,11 @@ function PracticeFlow() {
             nextLabel="Next"
             onNext={() => {
               cleanupRecorder();
-              dispatch({ type: "NEXT_STAGE", stage: "word-no-hint" });
+              dispatch({ type: "NEXT_STAGE", stage: passingCount >= 2 ? "sentence" : "word-no-hint" });
             }}
           />
         );
+      }
 
       case "word-no-hint":
         return (

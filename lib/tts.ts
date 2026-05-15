@@ -2,15 +2,17 @@ const cache = new Map<string, string>();
 const pending = new Map<string, Promise<string>>();
 
 let currentAudio: HTMLAudioElement | null = null;
+let currentPlayPromise: Promise<void> | null = null;
 let speakGeneration = 0;
 
 async function fetchBlobUrl(text: string): Promise<string> {
-  // If already in-flight, return the same promise — collapses concurrent calls into one fetch
   const inflight = pending.get(text);
   if (inflight) return inflight;
 
   const promise = (async () => {
-    console.log("[tts] fetching audio for:", text.slice(0, 40));
+    console.log("[tts] ── sending to Cartesia ──────────────────");
+    console.log("[tts] text:", `"${text}"`);
+    console.log("──────────────────────────────────────────────");
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -24,7 +26,7 @@ async function fetchBlobUrl(text: string): Promise<string> {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     cache.set(text, url);
-    console.log("[tts] cached audio for:", text.slice(0, 40));
+    console.log("[tts] ✓ cached:", `"${text}"`);
     return url;
   })().finally(() => {
     pending.delete(text);
@@ -37,12 +39,14 @@ async function fetchBlobUrl(text: string): Promise<string> {
 export async function speak(text: string): Promise<void> {
   if (typeof window === "undefined") return;
 
-  // Stop whatever is currently playing
+  // Stamp generation BEFORE any async work so the check after fetch is reliable
+  const gen = ++speakGeneration;
+
+  // Synchronously stop current audio. If play() hasn't resolved yet the browser
+  // rejects it with AbortError — we catch that silently at the play() site below.
   currentAudio?.pause();
   currentAudio = null;
-
-  // Stamp this call — if a newer speak() fires while we're fetching, we bail out
-  const gen = ++speakGeneration;
+  currentPlayPromise = null;
 
   let url: string;
   try {
@@ -52,7 +56,7 @@ export async function speak(text: string): Promise<void> {
     return;
   }
 
-  // A newer speak() was called while we were fetching — don't play stale audio
+  // A newer speak() fired while we were fetching — bail out
   if (gen !== speakGeneration) {
     console.log("[tts] speak cancelled (superseded):", text.slice(0, 40));
     return;
@@ -61,20 +65,34 @@ export async function speak(text: string): Promise<void> {
   return new Promise((resolve) => {
     const audio = new Audio(url);
     currentAudio = audio;
-    audio.onended = () => resolve();
+
+    console.log("[tts] ▶ playing now:", `"${text}"`);
+    audio.onended = () => { console.log("[tts] ■ finished:", `"${text}"`); currentPlayPromise = null; resolve(); };
     audio.onerror = (e) => {
       console.error("[tts] playback error", e);
+      currentPlayPromise = null;
       resolve();
     };
-    audio.play().catch((e) => {
-      console.error("[tts] play() rejected", e);
+
+    // Store play() promise so stopSpeaking() can await it before pausing
+    currentPlayPromise = audio.play().catch((e) => {
+      // AbortError is expected when pause() is called before play() resolves — silent
+      if ((e as DOMException).name !== "AbortError") {
+        console.error("[tts] play() rejected", e);
+      }
+      currentPlayPromise = null;
       resolve();
     });
   });
 }
 
-export function stopSpeaking() {
-  speakGeneration++; // Cancels any in-flight speak() calls
+export async function stopSpeaking() {
+  speakGeneration++; // cancels any in-flight speak() calls
+  // Await the play promise before pausing so we don't trigger AbortError
+  if (currentPlayPromise) {
+    await currentPlayPromise.catch(() => {});
+    currentPlayPromise = null;
+  }
   currentAudio?.pause();
   currentAudio = null;
 }

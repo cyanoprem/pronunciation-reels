@@ -119,9 +119,11 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
           v.play().catch(() => {});
           setPaused(false);
           wasVisible = true;
+          console.log("[feed] card", card.id, "autoplay —", card.word);
         } else if (!visible && wasVisible) {
           v.pause();
           wasVisible = false;
+          console.log("[feed] card", card.id, "paused (scrolled out)");
         }
       },
       { threshold: [0, 0.6] }
@@ -135,8 +137,10 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
       if (!prev) {
         setLikeCount(c => c + 1);
         setHeartAnimKey(k => k + 1);
+        console.log("[feed] liked card", card.id, "—", card.word);
       } else {
         setLikeCount(c => c - 1);
+        console.log("[feed] unliked card", card.id, "—", card.word);
       }
       return !prev;
     });
@@ -281,7 +285,10 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
             </span>
           </div>
           <button
-            onClick={() => router.push(`/practice?word=${encodeURIComponent(card.word)}&phonetic=${encodeURIComponent(card.phonetic)}&sentence=${encodeURIComponent(card.sentence)}&videoId=${card.id}&total=${VIDEO_DATA.length}`)}
+            onClick={() => {
+              console.log("[feed] practice tapped — word:", card.word, "| videoId:", card.id);
+              router.push(`/practice?word=${encodeURIComponent(card.word)}&phonetic=${encodeURIComponent(card.phonetic)}&sentence=${encodeURIComponent(card.sentence)}&videoId=${card.id}&total=${VIDEO_DATA.length}`);
+            }}
             className="px-5 py-2.5 rounded-lg font-bold text-white text-sm tracking-wide transition-opacity active:opacity-85"
             style={{
               background: "hsl(258 90% 66%)",
@@ -316,10 +323,30 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
   );
 }
 
+const MUTE_KEY = "feed_muted";
+
 function VideoFeedInner() {
   const containerRef = useRef<HTMLDivElement>(null);
+  // Always start muted for SSR (avoids hydration mismatch + autoplay policy on fresh load).
+  // After mount, restore the user's saved preference — safe because by the time they
+  // return from Practice the browser has a user gesture so unmuted autoplay is allowed.
   const [muted, setMuted] = useState(true);
-  const toggleMute = useCallback(() => setMuted(m => !m), []);
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(MUTE_KEY) === "0") {
+        setMuted(false);
+        console.log("[feed] restored unmuted preference from session");
+      }
+    } catch {}
+  }, []);
+  const toggleMute = useCallback(() => {
+    setMuted(m => {
+      const next = !m;
+      try { sessionStorage.setItem(MUTE_KEY, next ? "1" : "0"); } catch {}
+      console.log("[feed] mute toggled →", next ? "muted" : "unmuted");
+      return next;
+    });
+  }, []);
   const searchParams = useSearchParams();
 
   useEffect(() => {

@@ -2,65 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-
-interface VideoCard {
-  id: number;
-  word: string;
-  phonetic: string;
-  sentence: string;
-  src: string;
-  likes: number;
-  definition: string;
-}
-
-const BASE_VIDEOS: Omit<VideoCard, "id">[] = [
-  {
-    word: "Question",
-    phonetic: "Kwes-chun",
-    sentence: "I have one quick question.",
-    src: "https://sn-main.b-cdn.net/system-uploads/scenario-data/27c38b64-d89a-40bb-914c-a4d0faa2489e-Question-.mp4",
-    likes: 1243,
-    definition: "A sentence asking for information",
-  },
-  {
-    word: "Privacy",
-    phonetic: "Pry-vuh-see",
-    sentence: "I need privacy.",
-    src: "https://sn-main.b-cdn.net/system-uploads/scenario-data/de784283-5919-4b14-ab9c-c2b13874af5b-Privacy.mp4",
-    likes: 982,
-    definition: "The state of being free from observation",
-  },
-  {
-    word: "Hotel",
-    phonetic: "Hoh-tel",
-    sentence: "I stayed at a nice hotel.",
-    src: "https://sn-main.b-cdn.net/system-uploads/scenario-data/77171a32-d901-4b18-afac-628ca054e046-Hotel.mp4",
-    likes: 1567,
-    definition: "A place that provides lodging",
-  },
-  {
-    word: "Breakfast",
-    phonetic: "Brek-fust",
-    sentence: "I like to have a light breakfast.",
-    src: "https://sn-main.b-cdn.net/system-uploads/scenario-data/0215efec-3b6a-407a-bcf5-2bfcaabe359a-Breakfast.mp4",
-    likes: 2104,
-    definition: "The first meal of the day",
-  },
-  {
-    word: "Jewelry",
-    phonetic: "Jool-ree",
-    sentence: "She loves wearing jewelry.",
-    // TODO: swap with a real Jewelry clip when available
-    src: "https://sn-main.b-cdn.net/system-uploads/scenario-data/27c38b64-d89a-40bb-914c-a4d0faa2489e-Question-.mp4",
-    likes: 874,
-    definition: "Decorative items such as rings and necklaces",
-  },
-];
-
-const VIDEO_DATA: VideoCard[] = Array.from({ length: 20 }, (_, i) => ({
-  ...BASE_VIDEOS[i % BASE_VIDEOS.length],
-  id: i + 1,
-}));
+import { VIDEO_DATA, type VideoCard } from "@/lib/video-data";
 
 function HeartIcon({ filled }: { filled: boolean }) {
   return (
@@ -130,7 +72,7 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [card.id, card.word]);
 
   const handleLike = useCallback(() => {
     setLiked(prev => {
@@ -144,7 +86,7 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
       }
       return !prev;
     });
-  }, []);
+  }, [card.id, card.word]);
 
   const handleTogglePlay = useCallback(() => {
     const v = videoRef.current;
@@ -332,12 +274,15 @@ function VideoFeedInner() {
   // return from Practice the browser has a user gesture so unmuted autoplay is allowed.
   const [muted, setMuted] = useState(true);
   useEffect(() => {
-    try {
-      if (sessionStorage.getItem(MUTE_KEY) === "0") {
-        setMuted(false);
-        console.log("[feed] restored unmuted preference from session");
-      }
-    } catch {}
+    const restoreTimer = window.setTimeout(() => {
+      try {
+        if (sessionStorage.getItem(MUTE_KEY) === "0") {
+          setMuted(false);
+          console.log("[feed] restored unmuted preference from session");
+        }
+      } catch {}
+    }, 0);
+    return () => window.clearTimeout(restoreTimer);
   }, []);
   const toggleMute = useCallback(() => {
     setMuted(m => {

@@ -79,6 +79,30 @@ type Context = {
 };
 ```
 
+### Gating premium features — `is_paid` vs `subscription.is_active`
+
+⚠️ **`subscription.is_active === true` is NOT the same as "user has paid."**
+
+Free-trial users have:
+```
+user.is_paid: false
+subscription.is_active: true
+subscription.status: "active"
+subscription.type: "free_trial"
+```
+
+So a gate that only checks `subscription.is_active` will let free-trial users through.
+
+For "paid with active subscription" gating, require **both**:
+
+```ts
+const hasActiveSubscription =
+  ctx.user?.is_paid === true &&
+  ctx.user?.subscription?.is_active === true;
+```
+
+Observed `subscription.type` values so far: `"free_trial"` (the rest are unconfirmed — ask the backend team if you need the full enum).
+
 ---
 
 ## Events the host accepts (guest → host)

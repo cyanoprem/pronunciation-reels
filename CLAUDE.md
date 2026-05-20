@@ -13,3 +13,8 @@ Key rules for API calls from the guest:
 - Read `Authorization` and `x-sn-user-id` from `bridge.getContext().auth` — do not hardcode tokens.
 - Forward `ctx.app` headers (`x-sn-*` telemetry) on every fetch so backend telemetry stays continuous.
 - In local browser dev, `ctx.auth` is `undefined`; fall back to `localStorage` / query param per the pattern in `docs/webview-bridge.md`.
+
+Key rules for gating premium features:
+- `subscription.is_active === true` is NOT "user has paid" — free-trial users have `is_active: true` and `subscription.type: "free_trial"`. Gating only on `is_active` lets trial users through.
+- Require BOTH `user.is_paid === true` AND `user.subscription.is_active === true` for paid-feature access (see `docs/host-spec-supernova.md` → "Gating premium features").
+- For redirecting free users to the native paywall, use `bridge.emit("navigation.open", { path: "/premium" })`. The native payment modal (`payment.showModal`) is NOT wired through the bridge as of this writing.

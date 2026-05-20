@@ -45,6 +45,7 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
   const [paused, setPaused] = useState(false);
   const [indicatorKey, setIndicatorKey] = useState(0);
   const [burstHeart, setBurstHeart] = useState<{ key: number; x: number; y: number } | null>(null);
+  const [shimmer, setShimmer] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,6 +67,7 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
           console.log("[feed] card", card.id, "autoplay —", card.word);
         } else if (!visible && wasVisible) {
           v.pause();
+          setShimmer(false);
           wasVisible = false;
           console.log("[feed] card", card.id, "paused (scrolled out)");
         }
@@ -75,6 +77,32 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
     observer.observe(el);
     return () => observer.disconnect();
   }, [card.id, card.word]);
+
+  // Shimmer the Practice CTA in the last ~5s of the video to lead the user.
+  // Video has `loop`, so onEnded never fires — watch currentTime instead and
+  // reset when it wraps back to near 0.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onTimeUpdate = () => {
+      const dur = v.duration;
+      if (!dur || !isFinite(dur)) return;
+      const remaining = dur - v.currentTime;
+      if (remaining <= 5 && remaining > 0) {
+        setShimmer(prev => {
+          if (!prev) console.log("[feed] shimmer ON — card", card.id, "remaining:", remaining.toFixed(2), "dur:", dur.toFixed(2));
+          return true;
+        });
+      } else if (v.currentTime < 0.4) {
+        setShimmer(prev => {
+          if (prev) console.log("[feed] shimmer OFF — card", card.id, "looped at", v.currentTime.toFixed(2));
+          return false;
+        });
+      }
+    };
+    v.addEventListener("timeupdate", onTimeUpdate);
+    return () => v.removeEventListener("timeupdate", onTimeUpdate);
+  }, [card.id]);
 
   const handleLike = useCallback(() => {
     setLiked(prev => {
@@ -237,7 +265,7 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
               }
               router.push(`/practice?word=${encodeURIComponent(card.word)}&phonetic=${encodeURIComponent(card.phonetic)}&sentence=${encodeURIComponent(card.sentence)}&videoId=${card.id}&total=${VIDEO_DATA.length}`);
             }}
-            className="px-5 py-2.5 rounded-lg font-bold text-white text-sm tracking-wide transition-opacity active:opacity-85"
+            className={`px-5 py-2.5 rounded-lg font-bold text-white text-sm tracking-wide transition-opacity active:opacity-85${shimmer ? " practice-shimmer" : ""}`}
             style={{
               background: "hsl(258 90% 66%)",
               boxShadow: "0 6px 20px hsl(258 90% 66% / 0.45)",

@@ -293,6 +293,38 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   transition: height 0.06s linear;
 }
 
+@keyframes practiceShimmer {
+  0%   { transform: translateX(-130%) skewX(-15deg); }
+  100% { transform: translateX(130%) skewX(-15deg); }
+}
+@keyframes practicePulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+.practice-shimmer {
+  position: relative;
+  overflow: hidden;
+  animation: practicePulse 1.5s ease-in-out infinite;
+}
+.practice-shimmer::before {
+  content: "";
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  right: 0;
+  width: 60%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.95) 50%,
+    transparent 100%
+  );
+  animation: practiceShimmer 1.5s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
 @layer utilities {
   input[type="search"]::-webkit-search-cancel-button {
     @apply hidden;

@@ -26,8 +26,11 @@ type Stage =
 
 interface State {
   stage: Stage;
-  wordScores: number[];
+  hintScores: number[];      // attempts in word-hint substage
+  noHintScores: number[];    // attempts in word-no-hint substage
   sentenceScore: number | null;
+  sentenceAttempts: number;
+  currentSubstage: "hint" | "no-hint";
   heardAs: string;
   tip: string;
   startedAt: number;
@@ -42,16 +45,29 @@ type Action =
   | { type: "CLEAR_MIC_ERROR" };
 
 const PASS = 70;
+const MAX_WORD_ATTEMPTS = 3;
+const MAX_SENTENCE_ATTEMPTS = 3;
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case "NEXT_STAGE":
-      return { ...state, stage: action.stage, micError: null };
+    case "NEXT_STAGE": {
+      const next = action.stage;
+      // Sync currentSubstage when entering a word substage so ANALYZED knows
+      // which bucket to push the score into.
+      const currentSubstage: State["currentSubstage"] =
+        next === "word-hint" ? "hint" :
+        next === "word-no-hint" ? "no-hint" :
+        state.currentSubstage;
+      return { ...state, stage: next, currentSubstage, micError: null };
+    }
     case "ANALYZED": {
       const pass = action.score >= PASS;
+      const updated = state.currentSubstage === "hint"
+        ? { hintScores: [...state.hintScores, action.score] }
+        : { noHintScores: [...state.noHintScores, action.score] };
       return {
         ...state,
-        wordScores: [...state.wordScores, action.score],
+        ...updated,
         heardAs: action.heardAs,
         tip: action.tip,
         stage: pass ? "pass-word" : "fail",
@@ -62,6 +78,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         sentenceScore: action.score,
+        sentenceAttempts: state.sentenceAttempts + 1,
         heardAs: action.heardAs,
         tip: action.tip,
         stage: pass ? "sentence-pass" : "sentence-fail",
@@ -78,8 +95,11 @@ function reducer(state: State, action: Action): State {
 
 const initialState: State = {
   stage: "word-hint",
-  wordScores: [],
+  hintScores: [],
+  noHintScores: [],
   sentenceScore: null,
+  sentenceAttempts: 0,
+  currentSubstage: "hint",
   heardAs: "",
   tip: "",
   startedAt: Date.now(),
@@ -317,8 +337,8 @@ function WordView({
     }
     console.log("[practice] stage:", showPhonetic ? "word-hint" : "word-no-hint", "— speaking word:", word);
     const ttsText = showPhonetic
-      ? `Now you try saying it. ${word}.`
-      : `Now try saying it without the hint. ${word}.`;
+      ? `Now you try saying it, ${word}`
+      : `Now try saying it without the hint, ${word}`;
     const t = setTimeout(() => {
       speak(ttsText).catch(() => {});
     }, 50);
@@ -346,7 +366,7 @@ function WordView({
           </div>
           {showPhonetic && !recordingStage && (
             <SpeakerButton
-              text={`Now you try saying it. ${word}.`}
+              text={`Now you try saying it, ${word}`}
               small
             />
           )}
@@ -427,21 +447,25 @@ function FailView({
   word,
   phonetic,
   onRetry,
+  headline,
+  ctaLabel = "Try Again",
 }: {
   word: string;
   phonetic?: string;
   onRetry: () => void;
+  headline?: React.ReactNode;
+  ctaLabel?: string;
 }) {
   useEffect(() => {
-    console.log("[practice] stage: fail — word:", word);
-  }, [word]);
+    console.log("[practice] stage:", ctaLabel === "Try Again" ? "fail" : "nice-try", "— word:", word);
+  }, [word, ctaLabel]);
 
   return (
     <div className="flex-1 flex flex-col items-center px-6 pt-4">
       <AvatarRing size={112} />
 
       <p className="mt-5 text-xl font-bold text-center" style={{ color: "hsl(38 95% 62%)" }}>
-        Not quite there<br />Try again
+        {headline ?? <>Not quite there<br />Try again</>}
       </p>
 
       <div
@@ -462,13 +486,13 @@ function FailView({
                   <span className="font-semibold text-lg tracking-wide" style={{ color: "hsl(38 95% 62%)" }}>{phonetic}</span>
                 </div>
               </div>
-              <SpeakerButton text={`The correct pronunciation is. ${word}.`} small />
+              <SpeakerButton text={`The correct pronunciation is, ${word}`} small />
             </div>
           </>
         ) : (
           <div className="flex items-center justify-between gap-3">
             <p className="flex-1 text-white text-lg font-medium leading-relaxed">{word}</p>
-            <SpeakerButton text={`Now say the full sentence. ${word}`} small />
+            <SpeakerButton text={`Now say the full sentence, ${word}`} small />
           </div>
         )}
       </div>
@@ -479,7 +503,7 @@ function FailView({
           className="w-full py-4 rounded-2xl font-bold text-white text-sm tracking-widest uppercase transition-opacity active:opacity-70"
           style={{ background: "hsl(258 90% 66%)", boxShadow: "0 6px 24px hsl(258 90% 66% / 0.4)" }}
         >
-          Try Again
+          {ctaLabel}
         </button>
       </div>
     </div>
@@ -533,7 +557,7 @@ function PassWordView({
         ) : (
           <div className="flex items-center justify-between gap-3">
             <p className="flex-1 text-white text-lg font-medium leading-relaxed">{word}</p>
-            <SpeakerButton text={`Now say the full sentence. ${word}`} small />
+            <SpeakerButton text={`Now say the full sentence, ${word}`} small />
           </div>
         )}
       </div>
@@ -585,7 +609,7 @@ function SentenceView({
     }
     console.log("[practice] stage: sentence — sentence:", sentence);
     const t = setTimeout(() => {
-      speak(`Now say the full sentence. ${sentence}`).catch(() => {});
+      speak(`Now say the full sentence, ${sentence}`).catch(() => {});
     }, 50);
     return () => clearTimeout(t);
   }, [sentence, recordingStage]);
@@ -618,7 +642,7 @@ function SentenceView({
         {!recordingStage && (
           <div className="mt-4 flex justify-center">
             <SpeakerButton
-              text={`Now say the full sentence. ${sentence}`}
+              text={`Now say the full sentence, ${sentence}`}
             />
           </div>
         )}
@@ -886,7 +910,8 @@ function PracticeFlow() {
     }
   }, [router, videoId, total]);
 
-  const { stage, wordScores, sentenceScore, heardAs, tip, startedAt, micError } = state;
+  const { stage, hintScores, noHintScores, sentenceScore, sentenceAttempts, currentSubstage, heardAs, tip, startedAt, micError } = state;
+  const inHintSubstage = currentSubstage === "hint";
 
   const renderStage = () => {
     switch (stage) {
@@ -911,14 +936,13 @@ function PracticeFlow() {
         );
 
       case "recording": {
-        const showHint = wordScores.filter(s => s >= PASS).length === 0;
         return (
           <WordView
-            word={word} phonetic={phonetic} showPhonetic={showHint}
+            word={word} phonetic={phonetic} showPhonetic={inHintSubstage}
             onMicPress={() => handleMicPress(false)}
             micError={micError} onClearMicError={() => dispatch({ type: "CLEAR_MIC_ERROR" })}
             recordingStage="recording" analyser={analyser}
-            onCancel={() => { cleanupRecorder(); dispatch({ type: "NEXT_STAGE", stage: showHint ? "word-hint" : "word-no-hint" }); }}
+            onCancel={() => { cleanupRecorder(); dispatch({ type: "NEXT_STAGE", stage: inHintSubstage ? "word-hint" : "word-no-hint" }); }}
             onStopAndSubmit={handleStopAndSubmit}
           />
         );
@@ -929,10 +953,9 @@ function PracticeFlow() {
         // fall through to show the same inline analyzing view
         // eslint-disable-next-line no-fallthrough
       case "analyzing": {
-        const showHint = wordScores.filter(s => s >= PASS).length === 0;
         return (
           <WordView
-            word={word} phonetic={phonetic} showPhonetic={showHint}
+            word={word} phonetic={phonetic} showPhonetic={inHintSubstage}
             onMicPress={() => handleMicPress(false)}
             micError={micError} onClearMicError={() => dispatch({ type: "CLEAR_MIC_ERROR" })}
             recordingStage="analyzing"
@@ -941,22 +964,29 @@ function PracticeFlow() {
       }
 
       case "fail": {
-        const retryStage = wordScores.some(s => s >= PASS) ? "word-no-hint" : "word-hint";
+        const attemptsHere = inHintSubstage ? hintScores.length : noHintScores.length;
+        const exhausted = attemptsHere >= MAX_WORD_ATTEMPTS;
+        const retryStage = inHintSubstage ? "word-hint" : "word-no-hint";
+        const advanceStage = inHintSubstage ? "word-no-hint" : "sentence";
         return (
           <FailView
             word={word}
             phonetic={phonetic}
+            headline={exhausted ? <>Nice try!<br />Let&rsquo;s keep going</> : undefined}
+            ctaLabel={exhausted ? "Continue" : "Try Again"}
             onRetry={() => {
+              if (exhausted) console.log("[practice]", currentSubstage, "attempts exhausted (", attemptsHere, ") — auto-advancing to", advanceStage);
               cleanupRecorder();
-              dispatch({ type: "NEXT_STAGE", stage: retryStage });
+              dispatch({ type: "NEXT_STAGE", stage: exhausted ? advanceStage : retryStage });
             }}
           />
         );
       }
 
       case "pass-word": {
-        // Count only passing scores — failures also push to wordScores so .length is unreliable
-        const passingCount = wordScores.filter(s => s >= PASS).length;
+        // Substage was just advanced by ANALYZED (via NEXT_STAGE on next tap); use
+        // currentSubstage at-pass-time to decide where Next goes.
+        const nextStage = inHintSubstage ? "word-no-hint" : "sentence";
         return (
           <PassWordView
             word={word}
@@ -964,7 +994,7 @@ function PracticeFlow() {
             nextLabel="Next"
             onNext={() => {
               cleanupRecorder();
-              dispatch({ type: "NEXT_STAGE", stage: passingCount >= 2 ? "sentence" : "word-no-hint" });
+              dispatch({ type: "NEXT_STAGE", stage: nextStage });
             }}
           />
         );
@@ -1015,16 +1045,21 @@ function PracticeFlow() {
           />
         );
 
-      case "sentence-fail":
+      case "sentence-fail": {
+        const sentenceExhausted = sentenceAttempts >= MAX_SENTENCE_ATTEMPTS;
         return (
           <FailView
             word={sentence}
+            headline={sentenceExhausted ? <>Nice try!<br />Let&rsquo;s wrap up</> : undefined}
+            ctaLabel={sentenceExhausted ? "See Results" : "Try Again"}
             onRetry={() => {
+              if (sentenceExhausted) console.log("[practice] sentence attempts exhausted (", sentenceAttempts, ") — auto-advancing to summary");
               cleanupRecorder();
-              dispatch({ type: "NEXT_STAGE", stage: "sentence" });
+              dispatch({ type: "NEXT_STAGE", stage: sentenceExhausted ? "summary" : "sentence" });
             }}
           />
         );
+      }
 
       case "sentence-pass":
         return (
@@ -1040,7 +1075,7 @@ function PracticeFlow() {
           <SummaryView
             word={word}
             phonetic={phonetic}
-            wordScores={wordScores}
+            wordScores={[...hintScores, ...noHintScores]}
             sentenceScore={sentenceScore}
             elapsedMs={Date.now() - startedAt}
             onFinish={handleFinish}

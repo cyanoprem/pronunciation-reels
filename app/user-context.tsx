@@ -81,12 +81,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const isNative = ctx?.host.isNative === true;
 
-  // In native, trust the bridge user. In browser dev (no user in context),
-  // fall back to ?is_paid= query param / localStorage for testing the gate.
+  // Gate requires BOTH: user has paid (is_paid) AND subscription is active.
+  // is_active alone is true for free_trial users — we want to gate them.
+  // In browser dev (no user in context) fall back to the ?is_paid= flag.
   const hasActiveSubscription = (() => {
     if (!ready) return false;
+    const isPaid = ctx?.user?.is_paid === true;
     const subActive = ctx?.user?.subscription?.is_active === true;
-    if (subActive) return true;
+    if (isPaid && subActive) return true;
     if (!isNative && !ctx?.user) return readDevIsPaid();
     return false;
   })();

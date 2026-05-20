@@ -379,7 +379,7 @@ function WordView({
         <div className="flex-1 flex items-end justify-center pb-8">
           <div className="flex flex-col items-center gap-3">
             <MicButton onPress={onMicPress} loading={ttsPlaying} />
-            <p className="text-white/40 text-xs">{ttsPlaying ? "Listen…" : "Tap to record"}</p>
+            <p className="text-white/40 text-xs">{ttsPlaying ? "Listen first…" : "Tap to record"}</p>
           </div>
         </div>
       )}
@@ -657,7 +657,7 @@ function SentenceView({
         <div className="flex-1 flex items-end justify-center pb-8">
           <div className="flex flex-col items-center gap-3">
             <MicButton onPress={onMicPress} loading={ttsPlaying} />
-            <p className="text-white/40 text-xs">{ttsPlaying ? "Listen…" : "Tap to record"}</p>
+            <p className="text-white/40 text-xs">{ttsPlaying ? "Listen first…" : "Tap to record"}</p>
           </div>
         </div>
       )}

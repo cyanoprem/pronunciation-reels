@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VIDEO_DATA, type VideoCard } from "@/lib/video-data";
+import { useUser } from "./user-context";
 
 function HeartIcon({ filled }: { filled: boolean }) {
   return (
@@ -37,6 +38,7 @@ function SparkleBadge({ size = 31 }: { size?: number }) {
 
 function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: boolean; onToggleMute: () => void }) {
   const router = useRouter();
+  const { hasActiveSubscription, redirectToPremium } = useUser();
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(card.likes);
   const [heartAnimKey, setHeartAnimKey] = useState(0);
@@ -228,7 +230,11 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
           </div>
           <button
             onClick={() => {
-              console.log("[feed] practice tapped — word:", card.word, "| videoId:", card.id);
+              console.log("[feed] practice tapped — word:", card.word, "| videoId:", card.id, "| paid:", hasActiveSubscription);
+              if (!hasActiveSubscription) {
+                redirectToPremium();
+                return;
+              }
               router.push(`/practice?word=${encodeURIComponent(card.word)}&phonetic=${encodeURIComponent(card.phonetic)}&sentence=${encodeURIComponent(card.sentence)}&videoId=${card.id}&total=${VIDEO_DATA.length}`);
             }}
             className="px-5 py-2.5 rounded-lg font-bold text-white text-sm tracking-wide transition-opacity active:opacity-85"

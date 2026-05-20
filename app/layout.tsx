@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Providers } from "./providers";
+
+const IS_DEV = process.env.NODE_ENV !== "production";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -33,6 +36,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} flex justify-center min-h-dvh bg-[#07080F]`}>
+        {IS_DEV && (
+          <Script src="/browser-shim.js" strategy="beforeInteractive" />
+        )}
         <Providers>
           <div className="relative w-full max-w-[430px] h-dvh overflow-hidden shrink-0">
             {children}

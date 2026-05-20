@@ -728,11 +728,14 @@ function SummaryView({
 }) {
   const allScores = sentenceScore != null ? [...wordScores, sentenceScore] : wordScores;
   const avg = avgScore(allScores);
+  // Floor the displayed final score at 60 for motivation — raw `avg` is kept
+  // for logging and internal logic.
+  const displayedAvg = Math.max(60, avg);
   const scoreColor = avg >= 85 ? "#4ade80" : avg >= 70 ? "#facc15" : "#fb923c";
 
   useEffect(() => {
-    console.log("[practice] stage: summary — word:", word, "| scores:", wordScores, "| sentence:", sentenceScore, "| avg:", avg, "| time:", formatTime(elapsedMs));
-  }, [avg, word, wordScores, sentenceScore, elapsedMs]);
+    console.log("[practice] stage: summary — word:", word, "| scores:", wordScores, "| sentence:", sentenceScore, "| avg:", avg, "| displayed:", displayedAvg, "| time:", formatTime(elapsedMs));
+  }, [avg, displayedAvg, word, wordScores, sentenceScore, elapsedMs]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-between px-6 pt-6 pb-8">
@@ -758,7 +761,7 @@ function SummaryView({
                 <span style={{ fontSize: 18 }}>⚡</span>
                 <span className="text-white/70 text-sm font-medium">Speaking score</span>
               </div>
-              <span className="font-bold text-base tabular-nums" style={{ color: scoreColor }}>{avg}%</span>
+              <span className="font-bold text-base tabular-nums" style={{ color: scoreColor }}>{displayedAvg}%</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

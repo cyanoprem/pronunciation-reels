@@ -181,7 +181,7 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
 
       <button
         onClick={(e) => { e.stopPropagation(); onToggleMute(); }}
-        className="absolute top-5 right-5 z-20 w-10 h-10 rounded-full flex items-center justify-center transition-opacity active:opacity-70"
+        className="absolute top-16 right-8 z-20 w-10 h-10 rounded-full flex items-center justify-center transition-opacity active:opacity-70"
         style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)" }}
         data-testid={`mute-button-${card.id}`}
         aria-label={muted ? "Unmute" : "Mute"}

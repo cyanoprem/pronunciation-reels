@@ -42,19 +42,38 @@ export type WebviewBridge = {
 declare global {
   interface Window {
     WebviewBridge?: WebviewBridge;
+    ReactNativeWebView?: { postMessage?: (msg: string) => void };
   }
 }
 
 // Defensive polling bootstrap — on Android the bridge injection occasionally lands
 // after guest scripts run. See docs/webview-bridge.md.
-export function getBridge(callback: (bridge: WebviewBridge) => void): void {
+//
+// In a regular browser (no native host, no shim — e.g. prod Vercel deploy opened
+// directly) the bridge never appears. Cap the wait so the dev fallback in
+// UserProvider (?is_paid query param / localStorage) can kick in instead of
+// the gate staying "not ready" forever.
+export function getBridge(callback: (bridge: WebviewBridge | null) => void): void {
   if (typeof window === "undefined") return;
-  const bridge = window.WebviewBridge;
-  if (bridge) {
-    callback(bridge);
+  if (window.WebviewBridge) {
+    callback(window.WebviewBridge);
     return;
   }
-  setTimeout(() => getBridge(callback), 0);
+  const inRNWebView = typeof window.ReactNativeWebView !== "undefined";
+  const maxMs = inRNWebView ? 5000 : 400;
+  const start = Date.now();
+  const poll = () => {
+    if (window.WebviewBridge) {
+      callback(window.WebviewBridge);
+      return;
+    }
+    if (Date.now() - start >= maxMs) {
+      callback(null);
+      return;
+    }
+    setTimeout(poll, 0);
+  };
+  poll();
 }
 
 export function emitNavigationOpen(path: string): void {

@@ -49,7 +49,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     getBridge((bridge) => {
-      setCtx(bridge.getContext());
+      setCtx(bridge ? bridge.getContext() : null);
       setReady(true);
     });
   }, []);

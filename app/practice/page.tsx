@@ -155,12 +155,11 @@ function SpeakerButton({ text, small, onPlayStart, onPlayEnd }: { text: string; 
   );
 }
 
-function MicButton({ onPress, loading }: { onPress: () => void; loading?: boolean }) {
+function MicButton({ onPress }: { onPress: () => void }) {
   return (
     <button
       onClick={onPress}
-      disabled={loading}
-      className="w-20 h-20 rounded-full flex items-center justify-center transition-transform active:scale-95 disabled:opacity-60"
+      className="w-20 h-20 rounded-full flex items-center justify-center transition-transform active:scale-95"
       style={{ background: "hsl(258 90% 66%)", boxShadow: "0 6px 28px hsl(258 90% 66% / 0.5)" }}
       aria-label="Start recording"
     >
@@ -304,7 +303,6 @@ function WordView({
   onCancel?: () => void;
   onStopAndSubmit?: () => void;
 }) {
-  const [ttsPlaying, setTtsPlaying] = useState(true);
   const didRecordRef = useRef(false);
 
   useEffect(() => {
@@ -315,18 +313,14 @@ function WordView({
     if (didRecordRef.current) {
       // returning from a cancelled recording — skip auto-play
       didRecordRef.current = false;
-      setTtsPlaying(false);
       return;
     }
     console.log("[practice] stage:", showPhonetic ? "word-hint" : "word-no-hint", "— speaking word:", word);
-    setTtsPlaying(true);
     const ttsText = showPhonetic
       ? `Now you try saying it. ${word}.`
       : `Now try saying it without the hint. ${word}.`;
     const t = setTimeout(() => {
-      speak(ttsText)
-        .catch(() => {})
-        .finally(() => setTtsPlaying(false));
+      speak(ttsText).catch(() => {});
     }, 50);
     return () => clearTimeout(t);
   }, [word, showPhonetic, recordingStage]);
@@ -354,8 +348,6 @@ function WordView({
             <SpeakerButton
               text={`Now you try saying it. ${word}.`}
               small
-              onPlayStart={() => setTtsPlaying(true)}
-              onPlayEnd={() => setTtsPlaying(false)}
             />
           )}
         </div>
@@ -377,10 +369,7 @@ function WordView({
       {/* IDLE — mic button */}
       {!recordingStage && (
         <div className="flex-1 flex items-end justify-center pb-8">
-          <div className="flex flex-col items-center gap-3">
-            <MicButton onPress={onMicPress} loading={ttsPlaying} />
-            <p className="text-white/40 text-xs">{ttsPlaying ? "Listen first…" : "Tap to record"}</p>
-          </div>
+          <MicButton onPress={onMicPress} />
         </div>
       )}
 
@@ -583,7 +572,6 @@ function SentenceView({
   onCancel?: () => void;
   onStopAndSubmit?: () => void;
 }) {
-  const [ttsPlaying, setTtsPlaying] = useState(true);
   const didRecordRef = useRef(false);
 
   useEffect(() => {
@@ -593,15 +581,11 @@ function SentenceView({
     }
     if (didRecordRef.current) {
       didRecordRef.current = false;
-      setTtsPlaying(false);
       return;
     }
     console.log("[practice] stage: sentence — sentence:", sentence);
-    setTtsPlaying(true);
     const t = setTimeout(() => {
-      speak(`Now say the full sentence. ${sentence}`)
-        .catch(() => {})
-        .finally(() => setTtsPlaying(false));
+      speak(`Now say the full sentence. ${sentence}`).catch(() => {});
     }, 50);
     return () => clearTimeout(t);
   }, [sentence, recordingStage]);
@@ -635,8 +619,6 @@ function SentenceView({
           <div className="mt-4 flex justify-center">
             <SpeakerButton
               text={`Now say the full sentence. ${sentence}`}
-              onPlayStart={() => setTtsPlaying(true)}
-              onPlayEnd={() => setTtsPlaying(false)}
             />
           </div>
         )}
@@ -655,10 +637,7 @@ function SentenceView({
       {/* IDLE — mic button */}
       {!recordingStage && (
         <div className="flex-1 flex items-end justify-center pb-8">
-          <div className="flex flex-col items-center gap-3">
-            <MicButton onPress={onMicPress} loading={ttsPlaying} />
-            <p className="text-white/40 text-xs">{ttsPlaying ? "Listen first…" : "Tap to record"}</p>
-          </div>
+          <MicButton onPress={onMicPress} />
         </div>
       )}
 
@@ -830,6 +809,7 @@ function PracticeFlow() {
 
   const handleMicPress = useCallback(async (forSentence = false) => {
     console.log("[practice] mic pressed, stage:", state.stage);
+    await stopSpeaking();
     try {
       const rec = await createRecorder();
       recorderRef.current = rec;

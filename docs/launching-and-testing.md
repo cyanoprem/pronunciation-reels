@@ -80,6 +80,16 @@ This gives the prototype a dedicated bottom tab with its own allowlist, icon, la
 
 ---
 
+## Vercel deployment notes (for branch testing)
+
+If hosting on Vercel:
+
+- **Deployment Protection** defaults to "Vercel Authentication" on previews — visitors must be logged into Vercel to view the URL. The mobile webview has no Vercel session cookie, so a protected preview URL will hang on the SSO redirect when loaded in-app. Either disable Vercel Authentication for this project (Settings → Deployment Protection → toggle off "Require Log In") or generate a Protection Bypass token and pass it via `?x-vercel-protection-bypass=…&x-vercel-set-bypass-cookie=true` on every URL the app loads.
+- **Use a `*.gosupernova.live` (or `*.getsupernova.ai`) domain per branch** so the webview allowlist permits it. In Vercel → Settings → Domains, add a subdomain like `exp-{feature}.gosupernova.live`, then edit it and pin Git Branch to the feature branch. Add a CNAME record at the DNS provider pointing the subdomain to `cname.vercel-dns.com`. The branch then auto-deploys to that URL on every push, and the mobile app can load it without changing `allowed_subdomains`.
+- **Auto-generated `*.vercel.app` preview URLs are blocked by the webview allowlist.** Only use them for desktop browser testing.
+
+---
+
 ## Recommendation
 
 - **For testing / iteration:** Use the full-screen push (`/webview?uri=...`). Zero config once the prototype is on an allowed subdomain.

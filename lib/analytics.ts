@@ -9,9 +9,11 @@
 
 import type { BridgeContext, BridgeUser } from "./bridge";
 
-const SUPERNOVA_BASE = "https://app.gosupernova.com";
+// Same-origin proxy → /api/kv-proxy/[key] in this app forwards to
+// https://app.gosupernova.com/api/users/kv/[key] server-side. Avoids CORS
+// preflight that the Supernova KV endpoint doesn't support.
 const KV_KEY = "pr_analytics:v1";
-const KV_PATH = `/api/users/kv/${KV_KEY}`;
+const KV_PATH = `/api/kv-proxy/${encodeURIComponent(KV_KEY)}`;
 const QUEUE_STORAGE_KEY = "pr_analytics_queue";
 const FLUSH_DEBOUNCE_MS = 2000;
 const PRACTICE_LOG_CAP = 500;
@@ -202,7 +204,7 @@ export function reduce(blob: Blob, events: AnalyticsEvent[], subActiveNow: boole
 }
 
 async function fetchBlob(headers: Record<string, string>): Promise<Blob | null> {
-  const res = await fetch(`${SUPERNOVA_BASE}${KV_PATH}`, { headers, credentials: "omit" });
+  const res = await fetch(KV_PATH, { headers });
   if (res.status === 404) return null;
   if (!res.ok) {
     console.warn("[analytics] GET blob failed", res.status);
@@ -213,11 +215,10 @@ async function fetchBlob(headers: Record<string, string>): Promise<Blob | null> 
 }
 
 async function putBlob(headers: Record<string, string>, blob: Blob): Promise<void> {
-  const res = await fetch(`${SUPERNOVA_BASE}${KV_PATH}`, {
+  const res = await fetch(KV_PATH, {
     method: "PUT",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ value: blob }),
-    credentials: "omit",
   });
   if (!res.ok) {
     console.warn("[analytics] PUT blob failed", res.status);

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VIDEO_DATA, type VideoCard } from "@/lib/video-data";
+import { track } from "@/lib/analytics";
 import { useUser } from "./user-context";
 
 function HeartIcon({ filled }: { filled: boolean }) {
@@ -65,6 +66,7 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
           setPaused(false);
           wasVisible = true;
           console.log("[feed] card", card.id, "autoplay —", card.word);
+          track("reel_viewed", { reelId: card.id, word: card.word });
         } else if (!visible && wasVisible) {
           v.pause();
           setShimmer(false);
@@ -259,7 +261,9 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
           <button
             onClick={() => {
               console.log("[feed] practice tapped — word:", card.word, "| videoId:", card.id, "| paid:", hasActiveSubscription);
+              track("reel_practice_tapped", { reelId: card.id, word: card.word, paid: hasActiveSubscription });
               if (!hasActiveSubscription) {
+                track("practice_gated", { reelId: card.id, word: card.word });
                 redirectToPremium();
                 return;
               }

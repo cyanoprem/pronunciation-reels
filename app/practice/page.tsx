@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useReducer, useEffect, useRef, useCallback, useState } from "react";
 import { createRecorder, Recorder } from "@/lib/recorder";
 import { speak, stopSpeaking } from "@/lib/tts";
+import { track } from "@/lib/analytics";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -716,6 +717,7 @@ function SentenceView({
 
 function SummaryView({
   word,
+  videoId,
   phonetic,
   wordScores,
   sentenceScore,
@@ -723,6 +725,7 @@ function SummaryView({
   onFinish,
 }: {
   word: string;
+  videoId: number;
   phonetic: string;
   wordScores: number[];
   sentenceScore: number | null;
@@ -738,7 +741,10 @@ function SummaryView({
 
   useEffect(() => {
     console.log("[practice] stage: summary — word:", word, "| scores:", wordScores, "| sentence:", sentenceScore, "| avg:", avg, "| displayed:", displayedAvg, "| time:", formatTime(elapsedMs));
-  }, [avg, displayedAvg, word, wordScores, sentenceScore, elapsedMs]);
+    track("practice_completed", { videoId, word, avgScore: avg, elapsedMs });
+    // Only fire once on mount of summary view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-between px-6 pt-6 pb-8">
@@ -808,7 +814,17 @@ function PracticeFlow() {
   const recorderRef = useRef<Recorder | null>(null);
   const blobRef = useRef<Blob | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+
+  useEffect(() => {
+    track("practice_started", { videoId, word });
+    // Fire once per Practice route mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const cleanupRecorder = useCallback(() => {
     recorderRef.current?.cleanup();
@@ -869,12 +885,21 @@ function PracticeFlow() {
       const res = await fetch("/api/analyze", { method: "POST", body: formData });
       const data = await res.json() as { score: number; heardAs: string; tip: string };
       console.log("[practice] analyze result:", data);
+      const cur = stateRef.current;
+      const attempt = (cur.currentSubstage === "hint" ? cur.hintScores.length : cur.noHintScores.length) + 1;
+      track("practice_attempt", {
+        videoId,
+        word,
+        stage: cur.currentSubstage === "hint" ? "word_hint" : "word_no_hint",
+        attempt,
+        score: data.score,
+      });
       dispatch({ type: "ANALYZED", ...data });
     } catch (e) {
       console.error("[practice] stop+submit error", e);
       dispatch({ type: "ANALYZED", score: 0, heardAs: "—", tip: "Network error. Try again." });
     }
-  }, [word]);
+  }, [word, videoId]);
 
   const handleSentenceStopAndSubmit = useCallback(async () => {
     const rec = recorderRef.current;
@@ -891,12 +916,19 @@ function PracticeFlow() {
       const res = await fetch("/api/analyze", { method: "POST", body: formData });
       const data = await res.json() as { score: number; heardAs: string; tip: string };
       console.log("[practice] sentence analyze result:", data);
+      track("practice_attempt", {
+        videoId,
+        word,
+        stage: "sentence",
+        attempt: stateRef.current.sentenceAttempts + 1,
+        score: data.score,
+      });
       dispatch({ type: "SENTENCE_ANALYZED", ...data });
     } catch (e) {
       console.error("[practice] sentence stop+submit error", e);
       dispatch({ type: "SENTENCE_ANALYZED", score: 0, heardAs: "—", tip: "Network error. Try again." });
     }
-  }, [sentence]);
+  }, [sentence, videoId, word]);
 
   const handleFinish = useCallback(() => {
     void stopSpeaking();
@@ -1074,6 +1106,7 @@ function PracticeFlow() {
         return (
           <SummaryView
             word={word}
+            videoId={videoId}
             phonetic={phonetic}
             wordScores={[...hintScores, ...noHintScores]}
             sentenceScore={sentenceScore}

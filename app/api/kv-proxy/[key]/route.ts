@@ -10,7 +10,9 @@
 // Auth headers (Authorization, x-sn-user-id, x-sn-*) come from the client —
 // originally injected by the WebviewBridge per docs/webview-bridge.md.
 
-const UPSTREAM = "https://app.gosupernova.com/api/users/kv";
+// docs/api-web-prototypes.md lists app.gosupernova.com but that hostname does
+// not resolve (NXDOMAIN). The live API is app.gosupernova.live.
+const UPSTREAM = "https://app.gosupernova.live/api/users/kv";
 
 function forwardHeaders(req: Request): Headers {
   const out = new Headers();

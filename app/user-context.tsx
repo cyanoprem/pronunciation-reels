@@ -7,6 +7,7 @@ import {
   emitNavigationOpen,
   getBridge,
 } from "@/lib/bridge";
+import { track } from "@/lib/analytics";
 
 const DEV_PAID_KEY = "sn_dev_is_paid";
 // Set when we redirect to /premium so we know to refresh on return.
@@ -99,6 +100,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore — reload-on-return just won't fire
     }
+    track("premium_redirect", {});
     emitNavigationOpen("/premium");
   }, []);
 

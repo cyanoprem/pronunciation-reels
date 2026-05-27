@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VIDEO_DATA, type VideoCard } from "@/lib/video-data";
+import { track } from "@/lib/analytics";
 import { useUser } from "./user-context";
 
 function HeartIcon({ filled }: { filled: boolean }) {
@@ -36,7 +37,25 @@ function SparkleBadge({ size = 31 }: { size?: number }) {
   );
 }
 
-function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: boolean; onToggleMute: () => void }) {
+const PRELOAD_AHEAD = 3;
+const PRELOAD_BEHIND = 1;
+
+function VideoCardItem({
+  card,
+  idx,
+  activeIdx,
+  onBecameActive,
+  muted,
+  onToggleMute,
+}: {
+  card: VideoCard;
+  idx: number;
+  activeIdx: number;
+  onBecameActive: (idx: number) => void;
+  muted: boolean;
+  onToggleMute: () => void;
+}) {
+  const shouldLoad = idx >= activeIdx - PRELOAD_BEHIND && idx <= activeIdx + PRELOAD_AHEAD;
   const router = useRouter();
   const { hasActiveSubscription, redirectToPremium } = useUser();
   const [liked, setLiked] = useState(false);
@@ -56,6 +75,11 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
     if (!v || !el) return;
 
     let wasVisible = false;
+    // Dwell-time gate for the reel_viewed analytics event: a card has to stay
+    // visible for DWELL_MS before counting as a real impression. 3s matches
+    // industry "actually watched" thresholds and avoids buffering-stall noise.
+    const DWELL_MS = 3000;
+    let dwellTimer: ReturnType<typeof setTimeout> | null = null;
     const observer = new IntersectionObserver(
       ([entry]) => {
         const visible = entry.isIntersecting && entry.intersectionRatio >= 0.6;
@@ -65,18 +89,32 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
           setPaused(false);
           wasVisible = true;
           console.log("[feed] card", card.id, "autoplay —", card.word);
+          // Update parent so the rolling preload window shifts to follow us.
+          onBecameActive(idx);
+          if (dwellTimer) clearTimeout(dwellTimer);
+          dwellTimer = setTimeout(() => {
+            track("reel_viewed", { reelId: card.id, word: card.word });
+            dwellTimer = null;
+          }, DWELL_MS);
         } else if (!visible && wasVisible) {
           v.pause();
           setShimmer(false);
           wasVisible = false;
           console.log("[feed] card", card.id, "paused (scrolled out)");
+          if (dwellTimer) {
+            clearTimeout(dwellTimer);
+            dwellTimer = null;
+          }
         }
       },
-      { threshold: [0, 0.6] }
+      { threshold: 0.6 }
     );
     observer.observe(el);
-    return () => observer.disconnect();
-  }, [card.id, card.word]);
+    return () => {
+      observer.disconnect();
+      if (dwellTimer) clearTimeout(dwellTimer);
+    };
+  }, [card.id, card.word, idx, onBecameActive]);
 
   // Shimmer the Practice CTA in the last ~5s of the video to lead the user.
   // Video has `loop`, so onEnded never fires — watch currentTime instead and
@@ -178,12 +216,12 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
         <video
           ref={videoRef}
           key={card.id}
-          src={card.src}
+          src={shouldLoad ? card.src : undefined}
           className="w-full h-full pointer-events-none"
           loop
           muted={muted}
           playsInline
-          preload="metadata"
+          preload={shouldLoad ? "auto" : "none"}
           style={{ objectFit: "cover" }}
         />
       </div>
@@ -259,7 +297,9 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
           <button
             onClick={() => {
               console.log("[feed] practice tapped — word:", card.word, "| videoId:", card.id, "| paid:", hasActiveSubscription);
+              track("reel_practice_tapped", { reelId: card.id, word: card.word, paid: hasActiveSubscription });
               if (!hasActiveSubscription) {
+                track("practice_gated", { reelId: card.id, word: card.word });
                 redirectToPremium();
                 return;
               }
@@ -328,6 +368,17 @@ function VideoFeedInner() {
   }, []);
   const searchParams = useSearchParams();
 
+  // Rolling-window preload: only cards near the active one load video data.
+  // Initial active index honors ?next=N (1-indexed reel id) so returning from
+  // /practice positions the window around the destination reel immediately.
+  const [activeIdx, setActiveIdx] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const next = new URLSearchParams(window.location.search).get("next");
+    const id = next ? parseInt(next, 10) : NaN;
+    if (isNaN(id)) return 0;
+    return Math.max(0, Math.min(VIDEO_DATA.length - 1, id - 1));
+  });
+
   useEffect(() => {
     const nextId = searchParams.get("next");
     if (!nextId) return;
@@ -335,6 +386,8 @@ function VideoFeedInner() {
     window.history.replaceState(null, "", "/");
     const id = parseInt(nextId, 10);
     if (isNaN(id)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing local state to URL searchParams; this effect is the only place that can observe a route change without a remount.
+    setActiveIdx(Math.max(0, Math.min(VIDEO_DATA.length - 1, id - 1)));
     // Wait one tick for cards to mount, then scroll
     requestAnimationFrame(() => {
       const el = document.querySelector(`[data-testid="video-card-${id}"]`);
@@ -352,10 +405,13 @@ function VideoFeedInner() {
         ref={containerRef}
         className="snap-container absolute inset-0"
       >
-        {VIDEO_DATA.map((card) => (
+        {VIDEO_DATA.map((card, idx) => (
           <VideoCardItem
             key={card.id}
             card={card}
+            idx={idx}
+            activeIdx={activeIdx}
+            onBecameActive={setActiveIdx}
             muted={muted}
             onToggleMute={toggleMute}
           />

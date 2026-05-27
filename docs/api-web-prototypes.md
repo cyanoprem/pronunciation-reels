@@ -2,7 +2,19 @@
 
 All routes require authentication via `Authorization: Bearer <token>` header (or `auth_token` cookie) and `x-sn-user-id` header.
 
-Base URL: `https://app.gosupernova.com` (or your local dev server)
+Base URL: `https://app.gosupernova.live` (`https://app.getsupernova.ai` also serves the same API). An earlier draft of this doc referenced `app.gosupernova.live` — that hostname does NOT resolve (NXDOMAIN). Use `app.gosupernova.live`.
+
+## ⚠ CORS limitation (read before calling from a browser)
+
+The `/api/kv/*` and `/api/users/kv/*` endpoints return no `Access-Control-*` headers. Any cross-origin browser fetch (e.g. from a prototype hosted on `*.vercel.app` or even on a different `*.gosupernova.live` subdomain) gets blocked at preflight with a 500/empty response — the analytics flush will fail silently.
+
+To write KV from the client, route every request through a **same-origin proxy** in your prototype's own Next.js app. Reference implementation: `app/api/kv-proxy/[key]/route.ts` in `pronunciation-reels`. The proxy:
+
+1. Accepts `GET` and `PUT` at `/api/kv-proxy/[key]`.
+2. Forwards `Authorization`, `x-sn-user-id`, and all `x-sn-*` headers from the incoming request.
+3. Calls `https://app.gosupernova.live/api/users/kv/[key]` server-side and returns the upstream response verbatim.
+
+Browser sees same-origin → no preflight. Server-to-server call → CORS doesn't apply. The other `/api/speak/*` endpoints can be hit directly from the browser if they have CORS configured; KV does not.
 
 ---
 

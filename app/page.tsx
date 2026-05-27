@@ -57,6 +57,12 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
     if (!v || !el) return;
 
     let wasVisible = false;
+    // Dwell-time gate for the reel_viewed analytics event: a card has to stay
+    // visible for DWELL_MS before counting as a real impression. Without this,
+    // fly-by intersections during fast scroll (especially when returning via
+    // ?next=N) over-count every card the scroll passes through.
+    const DWELL_MS = 1000;
+    let dwellTimer: ReturnType<typeof setTimeout> | null = null;
     const observer = new IntersectionObserver(
       ([entry]) => {
         const visible = entry.isIntersecting && entry.intersectionRatio >= 0.6;
@@ -66,18 +72,29 @@ function VideoCardItem({ card, muted, onToggleMute }: { card: VideoCard; muted: 
           setPaused(false);
           wasVisible = true;
           console.log("[feed] card", card.id, "autoplay —", card.word);
-          track("reel_viewed", { reelId: card.id, word: card.word });
+          if (dwellTimer) clearTimeout(dwellTimer);
+          dwellTimer = setTimeout(() => {
+            track("reel_viewed", { reelId: card.id, word: card.word });
+            dwellTimer = null;
+          }, DWELL_MS);
         } else if (!visible && wasVisible) {
           v.pause();
           setShimmer(false);
           wasVisible = false;
           console.log("[feed] card", card.id, "paused (scrolled out)");
+          if (dwellTimer) {
+            clearTimeout(dwellTimer);
+            dwellTimer = null;
+          }
         }
       },
       { threshold: [0, 0.6] }
     );
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (dwellTimer) clearTimeout(dwellTimer);
+    };
   }, [card.id, card.word]);
 
   // Shimmer the Practice CTA in the last ~5s of the video to lead the user.

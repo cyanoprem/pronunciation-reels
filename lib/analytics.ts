@@ -2,10 +2,15 @@
 // See plan: ~/.claude/plans/so-what-is-the-eager-snowflake.md and
 // docs/api-web-prototypes.md (KV shape) + docs/webview-bridge.md (auth source).
 //
-// Lifecycle: track() queues events in memory + sessionStorage. flush() GETs the
-// current blob, merges queued events via reduce(), PUTs it back. Flush triggers:
-// debounced 2s after last track, on visibilitychange→hidden, on pagehide
-// (sendBeacon so it survives webview teardown).
+// Lifecycle: track() queues events in memory + sessionStorage. flush() merges
+// queued events into the blob via reduce() and PUTs it back. Flush triggers:
+// debounced after last track, on visibilitychange→hidden, on pagehide.
+//
+// Edge-request budget: the blob is GET once per session then cached in memory,
+// so subsequent flushes are PUT-only (halves /api/kv-proxy traffic). The
+// debounce is long (15s) so a burst of scroll events collapses into one PUT;
+// visibilitychange/pagehide still force an immediate flush so nothing is lost
+// when the user leaves.
 
 import type { BridgeContext, BridgeUser } from "./bridge";
 
@@ -15,7 +20,7 @@ import type { BridgeContext, BridgeUser } from "./bridge";
 const KV_KEY = "pr_analytics:v1";
 const KV_PATH = `/api/kv-proxy/${encodeURIComponent(KV_KEY)}`;
 const QUEUE_STORAGE_KEY = "pr_analytics_queue";
-const FLUSH_DEBOUNCE_MS = 2000;
+const FLUSH_DEBOUNCE_MS = 15000;
 const PRACTICE_LOG_CAP = 500;
 
 export type AnalyticsEvent =
@@ -68,6 +73,10 @@ let queue: AnalyticsEvent[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let lifecycleBound = false;
 let flushing = false;
+// In-memory copy of the last-PUT blob. GET runs only when this is null (first
+// flush of the session); afterwards we merge onto it and PUT, skipping the GET.
+// Only updated after a PUT succeeds so a failed PUT doesn't desync the cache.
+let cachedBlob: Blob | null = null;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -266,15 +275,22 @@ export async function flush(): Promise<void> {
 
   try {
     const subActiveNow = isPaidFromUser(ctx.user ?? undefined);
-    const existing = await fetchBlob(headers);
-    const base = existing ?? emptyBlob(ctx.auth?.userId ?? null, subActiveNow);
+    // GET only on the first flush of the session; reuse the cached blob after.
+    const didGet = cachedBlob === null;
+    const base =
+      cachedBlob ??
+      (await fetchBlob(headers)) ??
+      emptyBlob(ctx.auth?.userId ?? null, subActiveNow);
     const merged = reduce(base, draining, subActiveNow);
     await putBlob(headers, merged);
+    cachedBlob = merged; // only cache after a successful PUT
     clearQueueBackup();
-    console.log("[analytics] flushed", draining.length, "events");
+    console.log("[analytics] flushed", draining.length, "events", didGet ? "(GET+PUT)" : "(PUT-only)");
   } catch (e) {
     console.error("[analytics] flush error", e);
-    // Restore drained events to the front so we retry next flush.
+    // Restore drained events to the front so we retry next flush. cachedBlob is
+    // left untouched (not advanced past this failed PUT), so the retry merges
+    // the same events onto the same base — no double-count.
     queue = [...draining, ...queue];
     writeQueueBackup();
   } finally {

@@ -214,10 +214,12 @@ export function reduce(blob: Blob, events: AnalyticsEvent[], subActiveNow: boole
 
 async function fetchBlob(headers: Record<string, string>): Promise<Blob | null> {
   const res = await fetch(KV_PATH, { headers });
-  if (res.status === 404) return null;
+  if (res.status === 404) return null; // legit: user has no blob yet
   if (!res.ok) {
-    console.warn("[analytics] GET blob failed", res.status);
-    return null;
+    // Transient error (e.g. 500). Throw so flush() restores the queue and
+    // retries — do NOT fall through to emptyBlob, which would overwrite the
+    // user's existing blob with empty data.
+    throw new Error(`[analytics] GET blob failed: ${res.status}`);
   }
   const body = (await res.json()) as { key: string; value: Blob };
   return body.value ?? null;
@@ -230,7 +232,10 @@ async function putBlob(headers: Record<string, string>, blob: Blob): Promise<voi
     body: JSON.stringify({ value: blob }),
   });
   if (!res.ok) {
-    console.warn("[analytics] PUT blob failed", res.status);
+    // Throw so flush() leaves cachedBlob un-advanced and restores the queue;
+    // the next flush retries the same events. Silently swallowing would mark
+    // the cache as persisted when it isn't, dropping the events for good.
+    throw new Error(`[analytics] PUT blob failed: ${res.status}`);
   }
 }
 

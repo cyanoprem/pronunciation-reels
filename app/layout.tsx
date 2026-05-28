@@ -16,6 +16,10 @@ export const metadata: Metadata = {
   title: "Video Feed Prototype",
   description: "Video Feed Prototype — a pronunciation learning app.",
   robots: "index, follow",
+  // Empty inline icon suppresses the browser's automatic /favicon.ico probe,
+  // which the in-app webview fired on every document load (~16K edge req/12h).
+  // The webview has no tab/address bar, so no icon is ever displayed anyway.
+  icons: { icon: "data:," },
   openGraph: {
     title: "Video Feed Prototype",
     description: "Video Feed Prototype — a pronunciation learning app.",

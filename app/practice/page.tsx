@@ -134,8 +134,9 @@ function AvatarRing({ size = 144 }: { size?: number }) {
       }}
     >
       <div className="w-full h-full rounded-full overflow-hidden flex items-end justify-center" style={{ background: "#1a1d2e" }}>
+        {/* Served from R2 CDN (not /public) to keep it off Vercel's edge-request budget. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/assets/avatar.png" alt="Tutor" className="w-full h-full object-cover object-top" />
+        <img src="https://r2-activity-data.gosupernova.live/system-uploads/scenario-data/2ece7e29-ae68-4f1b-b29a-69cfdbaf8bae-avatar.png" alt="Tutor" className="w-full h-full object-cover object-top" />
       </div>
     </div>
   );

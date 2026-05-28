@@ -31,8 +31,11 @@ function SparkleBadge({ size = 31 }: { size?: number }) {
       className="inline-flex items-center justify-center rounded-full flex-shrink-0"
       style={{ width: size, height: size, background: "white" }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/assets/sparkle.svg" alt="" width={inner} height={inner} style={{ display: "block" }} />
+      {/* Inlined (was /assets/sparkle.svg) — 310B, eliminates ~7K edge requests. */}
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" width={inner} height={inner} style={{ display: "block" }}>
+        <path d="M16 2 L17.5 13 L28 16 L17.5 19 L16 30 L14.5 19 L4 16 L14.5 13 Z" fill="#7C3AED" stroke="#7C3AED" strokeLinejoin="round" />
+        <path d="M25 4 L25.8 8.2 L30 9 L25.8 9.8 L25 14 L24.2 9.8 L20 9 L24.2 8.2 Z" fill="#A78BFA" />
+      </svg>
     </span>
   );
 }

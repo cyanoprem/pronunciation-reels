@@ -71,6 +71,7 @@ function VideoCardItem({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -143,6 +144,32 @@ function VideoCardItem({
     };
     v.addEventListener("timeupdate", onTimeUpdate);
     return () => v.removeEventListener("timeupdate", onTimeUpdate);
+  }, [card.id]);
+
+  // Smooth playback progress bar: drive it from rAF (~60fps) instead of the
+  // video's coarse, ~4/s `timeupdate` event (which made the bar step/jump).
+  // The loop only runs while the video is actually playing.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    let raf = 0;
+    const tick = () => {
+      const dur = v.duration;
+      if (dur && isFinite(dur) && progressRef.current) {
+        progressRef.current.style.width = `${(v.currentTime / dur) * 100}%`;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    const start = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); };
+    const stop = () => cancelAnimationFrame(raf);
+    v.addEventListener("play", start);
+    v.addEventListener("pause", stop);
+    if (!v.paused) start();
+    return () => {
+      stop();
+      v.removeEventListener("play", start);
+      v.removeEventListener("pause", stop);
+    };
   }, [card.id]);
 
   const handleLike = useCallback(() => {
@@ -230,6 +257,11 @@ function VideoCardItem({
       </div>
 
       <div className="absolute inset-0 video-overlay-gradient pointer-events-none" />
+
+      {/* Video playback progress bar (bottom edge). Width set imperatively in the timeupdate handler. */}
+      <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/20 z-10 pointer-events-none">
+        <div ref={progressRef} className="h-full bg-white" style={{ width: "0%" }} />
+      </div>
 
       {burstHeart && (
         <div
@@ -382,6 +414,17 @@ function VideoFeedInner() {
     return Math.max(0, Math.min(VIDEO_DATA.length - 1, id - 1));
   });
 
+  // Swipe hint appears 2s after landing on reel 1 — targets users who linger
+  // without swiping, rather than nagging everyone instantly. Cancelled if they
+  // swipe away before the delay elapses.
+  const [showHint, setShowHint] = useState(false);
+  useEffect(() => {
+    if (activeIdx !== 0) return;
+    const t = setTimeout(() => setShowHint(true), 2000);
+    // Reset on leaving reel 1 so the 2s delay re-applies if they scroll back.
+    return () => { clearTimeout(t); setShowHint(false); };
+  }, [activeIdx]);
+
   useEffect(() => {
     const nextId = searchParams.get("next");
     if (!nextId) return;
@@ -420,6 +463,17 @@ function VideoFeedInner() {
           />
         ))}
       </div>
+
+      {/* Swipe-up hint — only on the first reel; auto-hides once the user
+          scrolls (activeIdx changes). No persistence: shows every session. */}
+      {activeIdx === 0 && showHint && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-44 z-20 flex flex-col items-center gap-1 pointer-events-none animate-bounce">
+          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}>
+            <path d="M18 15l-6-6-6 6" />
+          </svg>
+          <span className="text-white text-xs font-semibold tracking-wide drop-shadow-md">Swipe up for more</span>
+        </div>
+      )}
     </div>
   );
 }

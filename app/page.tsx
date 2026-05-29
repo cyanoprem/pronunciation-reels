@@ -420,6 +420,17 @@ function VideoFeedInner() {
           />
         ))}
       </div>
+
+      {/* Swipe-up hint — only on the first reel; auto-hides once the user
+          scrolls (activeIdx changes). No persistence: shows every session. */}
+      {activeIdx === 0 && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-28 z-20 flex flex-col items-center gap-1 pointer-events-none animate-bounce">
+          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}>
+            <path d="M18 15l-6-6-6 6" />
+          </svg>
+          <span className="text-white text-xs font-semibold tracking-wide drop-shadow-md">Swipe up for more</span>
+        </div>
+      )}
     </div>
   );
 }
